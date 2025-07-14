@@ -14,6 +14,17 @@ unset($_SESSION['success_message'], $_SESSION['error_message']);
 // Get companies for datalist
 $companies_query = "SELECT name FROM companies ORDER BY name ASC";
 $companies_result = $conn->query($companies_query);
+
+// Check if query was successful
+if (!$companies_result) {
+    die("Error fetching companies: " . $conn->error);
+}
+
+// Store companies in an array to avoid issues with result pointer
+$companies = [];
+while($company = $companies_result->fetch_assoc()) {
+    $companies[] = $company['name'];
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -22,6 +33,43 @@ $companies_result = $conn->query($companies_query);
     <title>Purchase Form | KIMS</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .dropdown-menu {
+            border: 1px solid #dee2e6;
+            border-radius: 0.375rem;
+            box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+            z-index: 1050;
+        }
+        
+        .dropdown-item {
+            cursor: pointer;
+            padding: 0.5rem 1rem;
+            color: #212529;
+            text-decoration: none;
+            border: none;
+            background: none;
+            width: 100%;
+            text-align: left;
+        }
+        
+        .dropdown-item:hover,
+        .dropdown-item.active {
+            background-color: #0d6efd;
+            color: #fff;
+        }
+        
+        .is-invalid {
+            border-color: #dc3545;
+        }
+        
+        .is-valid {
+            border-color: #198754;
+        }
+        
+        .position-relative {
+            position: relative;
+        }
+    </style>
 </head>
 <body>
 <div class="container mt-5 mb-5">
@@ -40,13 +88,16 @@ $companies_result = $conn->query($companies_query);
             <form method="POST" action="handle_form.php" enctype="multipart/form-data">
                 <div class="mb-3">
                     <label for="companyname" class="form-label">Company Name <span class="text-danger">*</span></label>
-                    <input type="text" class="form-control" id="companyname" name="companyname" required 
-                           list="companies" value="<?= isset($_POST['companyname']) ? htmlspecialchars($_POST['companyname']) : '' ?>">
-                    <datalist id="companies">
-                        <?php while($company = $companies_result->fetch_assoc()): ?>
-                            <option value="<?= htmlspecialchars($company['name']) ?>">
-                        <?php endwhile; ?>
-                    </datalist>
+                    <div class="position-relative">
+                        <input type="text" class="form-control" id="companyname" name="companyname" required 
+                               placeholder="Start typing to search companies..."
+                               value="<?= isset($_POST['companyname']) ? htmlspecialchars($_POST['companyname']) : '' ?>"
+                               autocomplete="off">
+                        <div id="company-suggestions" class="dropdown-menu w-100" style="max-height: 200px; overflow-y: auto; display: none;">
+                        </div>
+                    </div>
+                    <div class="form-text text-muted">You can only select from existing companies in the database.</div>
+                    <input type="hidden" id="company-selected" name="company_selected" value="0">
                 </div>
                 <div class="row g-3">
                     <div class="col-md-4">
@@ -134,6 +185,166 @@ $companies_result = $conn->query($companies_query);
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    // Companies data from PHP
+    const companies = <?= json_encode($companies) ?>;
+    
+    const companyInput = document.getElementById('companyname');
+    const suggestionBox = document.getElementById('company-suggestions');
+    const companySelected = document.getElementById('company-selected');
+    const form = companyInput.closest('form');
+    
+    let selectedIndex = -1;
+    let filteredCompanies = [];
+    
+    // Function to filter companies based on input
+    function filterCompanies(searchTerm) {
+        return companies.filter(company => 
+            company.toLowerCase().includes(searchTerm.toLowerCase())
+        );
+    }
+    
+    // Function to show suggestions
+    function showSuggestions(searchTerm) {
+        filteredCompanies = filterCompanies(searchTerm);
+        suggestionBox.innerHTML = '';
+        selectedIndex = -1;
+        
+        if (filteredCompanies.length === 0) {
+            suggestionBox.style.display = 'none';
+            return;
+        }
+        
+        filteredCompanies.forEach((company, index) => {
+            const item = document.createElement('a');
+            item.className = 'dropdown-item';
+            item.href = '#';
+            item.textContent = company;
+            item.addEventListener('click', function(e) {
+                e.preventDefault();
+                selectCompany(company);
+            });
+            suggestionBox.appendChild(item);
+        });
+        
+        suggestionBox.style.display = 'block';
+    }
+    
+    // Function to hide suggestions
+    function hideSuggestions() {
+        setTimeout(() => {
+            suggestionBox.style.display = 'none';
+        }, 200);
+    }
+    
+    // Function to select a company
+    function selectCompany(company) {
+        companyInput.value = company;
+        companySelected.value = '1';
+        companyInput.classList.remove('is-invalid');
+        companyInput.classList.add('is-valid');
+        suggestionBox.style.display = 'none';
+    }
+    
+    // Function to validate company selection
+    function validateCompany() {
+        const inputValue = companyInput.value.trim();
+        const isValid = companies.includes(inputValue);
+        
+        if (inputValue === '') {
+            companyInput.classList.remove('is-valid', 'is-invalid');
+            companySelected.value = '0';
+        } else if (isValid) {
+            companyInput.classList.remove('is-invalid');
+            companyInput.classList.add('is-valid');
+            companySelected.value = '1';
+        } else {
+            companyInput.classList.remove('is-valid');
+            companyInput.classList.add('is-invalid');
+            companySelected.value = '0';
+        }
+        
+        return isValid || inputValue === '';
+    }
+    
+    // Event listeners for company input
+    companyInput.addEventListener('input', function() {
+        const searchTerm = this.value.trim();
+        
+        if (searchTerm.length >= 1) {
+            showSuggestions(searchTerm);
+        } else {
+            hideSuggestions();
+        }
+        
+        validateCompany();
+    });
+    
+    companyInput.addEventListener('blur', function() {
+        hideSuggestions();
+        validateCompany();
+    });
+    
+    companyInput.addEventListener('focus', function() {
+        if (this.value.trim().length >= 1) {
+            showSuggestions(this.value.trim());
+        }
+    });
+    
+    // Keyboard navigation
+    companyInput.addEventListener('keydown', function(e) {
+        const items = suggestionBox.querySelectorAll('.dropdown-item');
+        
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            selectedIndex = Math.min(selectedIndex + 1, items.length - 1);
+            updateSelection(items);
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            selectedIndex = Math.max(selectedIndex - 1, -1);
+            updateSelection(items);
+        } else if (e.key === 'Enter') {
+            e.preventDefault();
+            if (selectedIndex >= 0 && items[selectedIndex]) {
+                selectCompany(items[selectedIndex].textContent);
+            }
+        } else if (e.key === 'Escape') {
+            hideSuggestions();
+        }
+    });
+    
+    // Function to update visual selection
+    function updateSelection(items) {
+        items.forEach((item, index) => {
+            if (index === selectedIndex) {
+                item.classList.add('active');
+            } else {
+                item.classList.remove('active');
+            }
+        });
+    }
+    
+    // Form validation before submit
+    form.addEventListener('submit', function(e) {
+        if (!validateCompany()) {
+            e.preventDefault();
+            companyInput.focus();
+            alert('Please select a valid company from the list.');
+            return false;
+        }
+        
+        if (companySelected.value !== '1') {
+            e.preventDefault();
+            companyInput.focus();
+            alert('Please select a company from the available options.');
+            return false;
+        }
+    });
+    
+    // Initial validation if there's a pre-filled value
+    if (companyInput.value.trim() !== '') {
+        validateCompany();
+    }
+
     // Auto-calculate amount
     document.querySelectorAll('#price, #quantityreceived').forEach(function(element) {
         element.addEventListener('change', function() {
