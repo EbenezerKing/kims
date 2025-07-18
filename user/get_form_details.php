@@ -101,11 +101,11 @@ $form = $result->fetch_assoc();
         <table class="table table-sm table-borderless">
             <tr>
                 <td class="text-muted"><strong>Unit Price:</strong></td>
-                <td class="text-success">₦<?= number_format($form['price'], 2) ?></td>
+                <td class="text-success">GHC <?= number_format($form['price'], 2) ?></td>
             </tr>
             <tr>
                 <td class="text-muted"><strong>Total Amount:</strong></td>
-                <td class="text-success fw-bold">₦<?= number_format($form['amount'], 2) ?></td>
+                <td class="text-success fw-bold">GHC <?= number_format($form['amount'], 2) ?></td>
             </tr>
         </table>
 
@@ -201,6 +201,14 @@ $form = $result->fetch_assoc();
                 <td><?= date('F d, Y \a\t H:i:s', strtotime($form['submitted_at'])) ?></td>
             </tr>
         </table>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-12">
+        <a href="print_form.php?id=<?= $form['id'] ?>" target="_blank" class="btn btn-info text-white">
+            <i class="bi bi-printer"></i> Print Form
+        </a>
     </div>
 </div>
 
